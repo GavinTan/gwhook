@@ -15,6 +15,7 @@ import (
 
 var (
 	secret string
+	cmd    string
 	port   int
 )
 
@@ -24,18 +25,19 @@ func genSha1(data string, key string) string {
 	return "sha1=" + hex.EncodeToString(h.Sum(nil))
 }
 
-func updateMysite() {
-	cmd := exec.Command("/bin/sh", "-c", "cd /usr/share/nginx/mysite && git reset --hard main && git pull")
-	_, err := cmd.CombinedOutput()
+func runCommand() error {
+	excmd := exec.Command("/bin/sh", "-c", cmd)
+	_, err := excmd.CombinedOutput()
 	if err != nil {
 		log.Println(err)
-	} else {
-		log.Println("git pull ok")
 	}
+
+	return err
 }
 
 func init() {
 	flag.StringVar(&secret, "secret", "", "Github webhook secret")
+	flag.StringVar(&cmd, "cmd", "", "Exec command")
 	flag.IntVar(&port, "port", 8833, "Port")
 	flag.Parse()
 
@@ -54,8 +56,12 @@ func main() {
 			data, _ := io.ReadAll(c.Request.Body)
 
 			if signature == genSha1(string(data), secret) {
-				updateMysite()
-				c.JSON(200, gin.H{})
+				err := runCommand()
+				if err != nil {
+					c.JSON(500, gin.H{"message": err.Error()})
+				} else {
+					c.JSON(200, gin.H{})
+				}
 			} else {
 				c.JSON(403, gin.H{
 					"message": "Secret verification failed",
